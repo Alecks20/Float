@@ -7,7 +7,7 @@ services:
     build: .
     container_name: timber_bot
     depends_on:
-      - mongodb
+      - db
     environment:
       - MONGO_USER=timber
       - MONGO_PASS=changeme
