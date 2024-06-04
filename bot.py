@@ -1,14 +1,14 @@
 import discord
 import os
-from config import bot
-import config
+from src.config import bot
+import src.config as config
 import asyncio
 
-from src.functions.ows import process_ows
+#from src.functions.ows import process_ows
 
-@bot.event
-async def on_message(msg):
-    await process_ows(msg)
+#@bot.event
+#async def on_message(msg):
+#    await process_ows(msg)
 
 @bot.event
 async def on_ready():

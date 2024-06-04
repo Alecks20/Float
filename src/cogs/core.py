@@ -1,8 +1,8 @@
 from discord.ext import commands
 import discord
-from config import bot, db
-import libraries
-import embeds
+from src.config import bot, db
+import src.libraries as libraries
+import src.embeds as embeds
 
 class core(commands.Cog):
     def __init__(self, bot):

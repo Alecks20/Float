@@ -1,7 +1,7 @@
 import discord
 import traceback
-from config import db, bot
-import libraries
+from src.config import db, bot
+import src.libraries as libraries
 
 embed_colour = 0x404D67
 
