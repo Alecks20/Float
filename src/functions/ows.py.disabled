@@ -1,0 +1,225 @@
+from config import db, bot
+import discord
+import random
+import embeds
+import traceback
+import requests
+import config
+import aiohttp
+import asyncio
+import json
+import libraries
+
+from src.views.core import requestedby
+
+# -- Processing one word stories --
+async def process_ows(msg):
+  if msg.author.bot == False:
+        document = db.ows.find_one({"channel_id": msg.channel.id,})
+        try:
+          last_author = document["last_author"]
+        except:
+          last_author = None
+        if document["guild_id"] == msg.guild.id and document["channel_id"] == msg.channel.id and msg.author.bot == False:
+            
+            try:
+                words = []
+                story_words = document["words"]
+                for item in story_words:
+                 words.append(item)
+                 words.append(" ")
+                old_story = "".join(words)
+                words.append(msg.content)
+                words.append(" ")
+                words = "".join(words)
+                
+            except:
+              pass
+
+            if len(old_story) < 2048 and len(words) > 2048:
+              await msg.channel.send(embed=embeds.get("fun","ows","halfway-warning"))
+
+            if len(old_story) < 4000 and len(words) > 4000:
+                await msg.channel.send(embed=embeds.get("fun","ows","nearly-at-limit"))
+
+            if len(msg.content) > 45:
+              await msg.delete()
+              try:
+                  channel_id = document["log_id"]
+                  channel = bot.get_channel(channel_id)
+                  em = embeds.get("fun","ows",("log",msg.content,msg.author.name.capitalize(),msg.author.avatar,msg.guild.name,"Message was over the 45 character limit"))
+                  await channel.send(embed=em)
+              except:
+                  pass
+
+            if (any(not character.isalnum() for character in msg.content)):
+                await msg.delete()
+                try:
+                  channel_id = document["log_id"]
+                  channel = bot.get_channel(channel_id)
+                  em = embeds.get("fun","ows",("log",msg.content,msg.author.name.capitalize(),msg.author.avatar,msg.guild.name,"Message contained non alpha-numeric characters!"))
+                  await channel.send(embed=em)
+                except:
+                  pass
+            elif last_author is not None and msg.author.id == last_author:
+                await msg.delete()
+                try:
+                  channel_id = document["log_id"]
+                  channel = bot.get_channel(channel_id)
+                  em = embeds.get("fun","ows",("log",msg.content,msg.author.name.capitalize(),msg.author.avatar,msg.guild.name,"User can not send 2 messages in a row in community stories"))
+                  await channel.send(embed=em)
+                except:
+                  pass
+
+            elif len(words) > 4096:
+              await msg.add_reaction("❌")
+              await msg.channel.send(embed=embeds.get("fun","ows","limit"))
+
+            else:
+                await msg.add_reaction("☑")
+                db.ows.update_one({"guild_id": msg.guild.id},{"$set": {"last_author": msg.author.id}})
+                if db.ows.find_one({"guild_id": msg.guild.id}):
+                  db.ows.update_one({ "guild_id": msg.guild.id },{ "$push": { "words": msg.content } })
+
+
+
+# -- Publishing one word stories -- 
+async def publish_story(ctx, name, info, db, bot=config.bot):
+      try:
+       
+       if not db.ows.find_one({"guild_id": ctx.guild.id}):
+          await ctx.respond(embed=embeds.get("core","denied","The one word story is currently not configured yet!"),ephemeral=True)
+          return
+       
+       words = await get_words_in_cache(ctx)
+       if len(words) < 1:
+          await ctx.respond(embed=embeds.get("denied","Your story doesn't have any characters in it!"),ephemeral=True)
+          return
+       
+       if not ctx.user.guild_permissions.manage_guild:
+          await ctx.respond(embed=embeds.get("core","denied","You require the manage server permission"), ephemeral=True)
+          return
+       
+       if len(name) > 256:
+          await ctx.respond(embed=embeds.get("core","denied","Story names can only be a max of 256 characters!"), ephemeral=True)
+          return
+       
+       if len(info) > 1024:
+          await ctx.respond(embed=embeds.get("core","denied","Story descriptions can only be a max of 1024 chracters!"), ephemeral=True)
+          return
+       
+       test = db.ows_stories.find_one({ "name": name, "guild_id": ctx.guild.id})
+       if test:
+          await ctx.respond(embed=embeds.get("core","denied","Story name already exists on the library!"), ephemeral=True)
+          return
+       
+       if db.ows_stories.count_documents({"guild_id": ctx.guild.id}) == 25:
+          await ctx.respond(embed=embeds("core","denied","You have reached the limit on how many stories you can have"), ephemeral=True)
+          return
+       
+       await ctx.response.defer()
+       guild_id = ctx.guild.id
+       result = db.ows.find_one({"guild_id": guild_id})
+
+       if result:
+          words = result["words"]
+       else:
+          await ctx.send_followup(embed=embeds.get("core","denied","Unable to fetch the words from your story"), ephemeral=True)
+          return
+       db.ows_stories.insert_one({"guild_id": ctx.guild.id,"name": name,"info": info, "words": words})
+
+       try:
+            db.ows.update_one({"guild_id": ctx.guild.id},{"$set": {"words": []}})
+            db.ows.update_one({"guild_id": ctx.guild.id},{"$set": {"last_author": None}})
+       except Exception as e:
+           await ctx.followup.send(embed=embeds.get("core","error",traceback.format_exc()), ephemeral=True)
+           print(e)
+
+       query = {"guild_id": ctx.guild.id}
+       results = db.ows.find(query)
+       for result in results:
+          channel = bot.get_channel(result["channel_id"])
+          await channel.send(embed=embeds.get("fun","ows","published"))
+       await ctx.followup.send(embed=embeds.get("core","success","Successfully uploaded your story to your servers story library!"),ephemeral=True)
+      except Exception:
+         await ctx.followup.send(embed=embeds.get("core","error",traceback.format_exc()),ephemeral=True)
+
+# -- Resetting the one word story -- 
+async def reset_ows(ctx):
+     try:
+            if not db.ows.find_one({"guild_id": ctx.guild.id}):
+              await ctx.response.send_message(embed=embeds.get("core","denied","The one word story is currently not configured yet!"),ephemeral=True)
+              return
+
+            if not ctx.user.guild_permissions.manage_guild:
+              await ctx.response.send_message(embed=embeds.get("core","denied","You don't have permissions to run this command!"),ephemeral=True)
+              return
+         
+            await ctx.response.defer()
+            cursor = db.ows.find({"guild_id": ctx.guild.id,})
+            db.ows.update_one({"guild_id": ctx.guild.id},{"$set": {"words": []}})
+            db.ows.update_one({"guild_id": ctx.guild.id},{"$set": {"last_author": None}})
+            await ctx.followup.send(embed=embeds.get("core","success","Successfully Reset the current one word story"),ephemeral=True)
+            cursor = db.ows.find({"guild_id": ctx.guild.id,})
+            for document in cursor:
+                channel = bot.get_channel(document["channel_id"])
+                await channel.send(embed=embeds.get("fun","ows",("reset",ctx.user)))
+     except Exception:
+          await ctx.followup.send(embed=embeds.get("core","error",traceback.format_exc()),ephemeral=True)
+
+
+# -- Deleting a one word story -- 
+async def delete_story(interaction, name, db, bot=config.bot):
+     await interaction.response.defer()
+     try:
+         if interaction.user.guild_permissions.manage_guild:
+            if not db.ows.find_one({"guild_id": interaction.guild.id}):
+              await interaction.followup.send(embed=embeds.get("core","denied","The one word story is currently not configured yet!"),view=requestedby(interaction.user))
+              return
+         
+            db.ows_stories.delete_one({"guild_id": interaction.guild.id,"name": name})
+            await interaction.followup.send(embed=embeds.get("core","success","Successfully deleted your requested story!"),ephemeral=True)
+         else:
+           await interaction.followup.send(embed=embeds.get("core","denied","You don't have permission to use this command"),ephemeral=True)
+     except Exception:
+          await interaction.followup.send(embed=embeds.get("core","error",traceback.format_exc()),ephemeral=True)
+
+
+# -- Reading a one word story -- 
+async def read_story(interaction, name, db, bot=config.bot):
+       await interaction.response.defer()
+       try:
+          if not db.ows.find_one({"guild_id": interaction.guild.id}):
+            await interaction.followup.send(embed=embeds.get("core","denied","The one word story is currently not configured yet!"))
+            return
+          
+          guild_id = interaction.guild.id
+          query = {"guild_id": guild_id, "name": name}
+          results = db.ows_stories.find(query)
+          for result in results:
+            story_name = result["name"]
+            story_info = result["info"]
+            story_words = result["words"]
+            words = []
+            for item in story_words:
+               words.append(item)
+               words.append(" ")
+            words = "".join(words)
+            embed = discord.Embed(colour=0x4c7fff, title=story_name, description=words)
+            embed.add_field(name="Social Links",value=libraries.SOCIAL_LINKS,inline=False)
+          try: 
+            await interaction.followup.send(embed=embed,view=requestedby(interaction.user))
+          except:
+            await interaction.followup.send(embed=embeds.get("denied",f"Unable to find a story named {name}"),ephemeral=True,view=requestedby(interaction.user))
+       except Exception as e:
+         await interaction.followup.send(embed=embeds.get("error",traceback.format_exc()),ephemeral=True,view=requestedby(interaction.user))
+
+async def get_words_in_cache(ctx):
+     document = db.ows.find_one({"guild_id": ctx.guild.id,})
+     words = document["words"]
+     story_words = []
+     for item in words:
+      story_words.append(item)
+      story_words.append(" ")
+     story_words = "".join(story_words)
+     return story_words

@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+
+  bot:
+    restart: always
+    build: .
+    container_name: timber_bot
+    depends_on:
+      - mongodb
+    environment:
+      - MONGO_USER=timber
+      - MONGO_PASS=changeme
+      - PROD_TOKEN=changeme
+
+
+  db:
+    restart: always
+    image: mongo:latest
+    container_name: timber_db
+    volumes:
+      - timber_db:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=timber
+      - MONGO_INITDB_ROOT_PASSWORD=changeme
+
+volumes:
+  timber_db:

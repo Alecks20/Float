@@ -1,0 +1,69 @@
+from discord.ext import commands
+import discord
+from config import bot, db
+import libraries
+import embeds
+import traceback
+
+import src.functions.ows as functions
+import src.views.ows as views
+
+class ows(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    
+    story_cmd = discord.SlashCommandGroup("ows", "Configure the one word story module")
+    
+    @story_cmd.command(name="channel",description="Set the channel of the one word story module")
+    @discord.default_permissions(manage_guild=True)
+    async def debug(self, ctx: discord.ApplicationContext, option: discord.TextChannel):
+
+        if not ctx.author.guild_permissions.manage_guild:
+          await ctx.respond(embed=embeds.get("core","denied","You don't have permissions to run this command!"),ephemeral=True)
+          return
+
+        await ctx.defer(ephemeral=True)
+        try:
+          channel = option
+          if db.ows.find_one({"guild_id": ctx.guild.id}):
+            db.ows.update_one({"guild_id": ctx.guild.id},{"$set": {"channel_id": channel.id}})
+          else:
+            db.ows.insert_one({"guild_id": ctx.guild.id,"channel_id": channel.id,"words": [],"last_author": None})
+
+          await channel.send(embed=embeds.get("fun","ows",("welcome",ctx.guild,ctx.user)))
+          await ctx.send_followup(embed=embeds.get("core","success",f"Successfully set {channel.mention} as the one word story channel!"))
+
+        except Exception:
+            await ctx.send_followup(embed=embeds.get("core","error",traceback.format_exc()))
+
+    @story_cmd.command(name="compile",description="Turn your one word story into a beautiful paragraph you can read")
+    async def compile_story(self, ctx: discord.ApplicationContext):
+      try:
+       if not db.ows.find_one({"guild_id": ctx.guild.id}):
+            await ctx.respond(embed=embeds.get("core","denied","The one word story is currently not configured yet!"),ephemeral=True)
+            return
+       
+       words = await functions.get_words_in_cache(ctx)
+       if len(words) < 1:
+          await ctx.respond(embed=embeds.get("core","denied","Your story doesn't have any characters in it!"),ephemeral=True)
+          return
+       
+       await ctx.defer()
+       response = await functions.get_words_in_cache(ctx)
+       await ctx.send_followup(embed=embeds.get("fun","ows",("compile",response)))
+      except Exception:
+         await ctx.respond(embed=embeds.get("core","error",traceback.format_exc()))
+
+    @story_cmd.command(name="reset", description="Reset the current story saved in cache, doesn't disable the module")
+    @discord.default_permissions(manage_guild=True)
+    async def owsreset(self, ctx):
+       await views.reset_story_modal(title="Reset Story")
+
+    @story_cmd.command(name="publish", description="Reset the current story saved in cache, doesn't disable the module")
+    @discord.default_permissions(manage_guild=True)
+    async def owsreset(self, ctx, name: discord.Option(str), info: discord.Option(str)):
+       await functions.publish_story(ctx, name, info, db, self.bot)
+
+def setup(bot):
+  bot.add_cog(ows(bot))

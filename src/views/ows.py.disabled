@@ -1,0 +1,79 @@
+import discord
+from discord import ui
+from src.functions.ows import publish_story, reset_ows, delete_story, read_story
+from src.views.core import requestedby
+from config import db
+
+
+class publish_story_modal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.add_item(discord.ui.InputText(label="Name of the story", placeholder="What you want to name your one word story", style=discord.InputTextStyle.short, required=True))
+        self.add_item(discord.ui.InputText(label="Story Description", placeholder="Briefely describe the story in a short form", style=discord.InputTextStyle.long, required=True))
+
+    async def callback(self, ctx: discord.ApplicationContext):
+     name = str(self.children[0].value)
+     info = str(self.children[1].value)
+     await publish_story(ctx, name, info, db)
+
+
+class compileview(discord.ui.View):
+
+  @discord.ui.button(label="Publish Story", style=discord.ButtonStyle.gray, emoji="📪")
+  async def publishstory(self,button,interaction):
+     await interaction.response.send_modal(publish_story_modal(title="Publish Story"))
+
+  @discord.ui.button(label="Reset Story", style=discord.ButtonStyle.gray, emoji="🗑️")
+  async def resetstory(self,button,interaction):
+    await interaction.response.send_modal(reset_story_modal(title="Reset Story"))
+
+
+
+class storiesview(discord.ui.View):
+  def __init__(self):
+     super().__init__(timeout=None)
+
+
+  @discord.ui.button(label="Delete Story", style=discord.ButtonStyle.gray, custom_id="delete_story", emoji="🗑️")
+  async def deletestory(self, interaction: discord.Interaction, button: discord.ui.Button):
+     await interaction.response.send_modal(delete_story_modal(title="Delete Story"))
+
+  @discord.ui.button(label="Read Story", style=discord.ButtonStyle.gray, custom_id="read_story", emoji="🌴")
+  async def readstory(self, interaction: discord.Interaction, button: discord.ui.Button):
+     await interaction.response.send_modal(read_story_modal(title="Read Story"))
+  
+
+class reset_story_modal(ui.Modal):
+   def __init__(self, *args, **kwargs) -> None:
+     super().__init__(*args, **kwargs)
+
+     self.add_item(discord.ui.InputText(label="Reset Reason", placeholder="Why you want to reset the story", style=discord.InputTextStyle.short, required=True))
+
+   async def callback(self, ctx: discord.ApplicationContext):
+     name = str(self.children[0].value)
+     await reset_ows(ctx)
+
+
+
+class delete_story_modal(ui.Modal):
+   def __init__(self, *args, **kwargs) -> None:
+     super().__init__(*args, **kwargs)
+
+     self.add_item(discord.ui.InputText(label="Name of the story", placeholder="The name of the story you want to delete", style=discord.InputTextStyle.short, required=True))
+
+   async def callback(self, ctx: discord.ApplicationContext):
+     name = str(self.children[0].value)
+     await delete_story(ctx, name, db)
+
+
+
+class read_story_modal(ui.Modal):
+   def __init__(self, *args, **kwargs) -> None:
+     super().__init__(*args, **kwargs)
+
+     self.add_item(discord.ui.InputText(label="Name of the story", placeholder="The name of the story you want to read", style=discord.InputTextStyle.short, required=True))
+
+   async def callback(self, ctx: discord.ApplicationContext):
+     name = str(self.children[0].value)
+     await read_story(ctx, name, db)

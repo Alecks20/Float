@@ -1,0 +1,1 @@
+SOCIAL_LINKS="[Invite Link](https://discord.com/api/oauth2/authorize?client_id=1090917174991933540&permissions=10206319209590&scope=bot%20applications.commands)・[Support Server](https://discord.gg/jbzxX2FdNn)・[Documentation](https://docs.cloudybot.xyz)"
