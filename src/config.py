@@ -18,21 +18,14 @@ try:
     testing_token = os.environ["TESTING_TOKEN"]
 except:
     print("Testing token was not set.")
-try:
-    mongo_string = os.environ["MONGO_STRING"]
-except:
-    mongo_string = None
 
 
 #Database Setup
 if testing == "false":
-   if mongo_string == None:
     username = os.environ["MONGO_USER"]
     password = os.environ["MONGO_PASS"]
     mongo = pymongo.MongoClient(f"mongodb://{username}:{password}@mongodb/")
-   else:
-    mongo = pymongo.MongoClient(os.environ["MONGO_STRING"])
-    db = mongo.float
+    db = mongo.sharky
 elif testing == "true":
     mongo = pymongo.MongoClient(os.environ["MONGO_TESTING"])
-    db = mongo.float_testing
+    db = mongo.sharky_testing
